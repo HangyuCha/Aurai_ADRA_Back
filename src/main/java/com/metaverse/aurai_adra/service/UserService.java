@@ -3,6 +3,7 @@ package com.metaverse.aurai_adra.service;
 import com.metaverse.aurai_adra.domain.User;
 import com.metaverse.aurai_adra.dto.UserRegisterDto;
 import com.metaverse.aurai_adra.repository.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,9 +15,12 @@ import java.util.Optional;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder; // PasswordEncoder 필드 추가
 
-    public UserService(UserRepository userRepository) {
+    // 생성자에 PasswordEncoder 주입받도록 수정
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public User registerUser(UserRegisterDto userRegisterDto) {
@@ -25,12 +29,12 @@ public class UserService {
             throw new IllegalStateException("이미 존재하는 닉네임입니다.");
         });
 
-        // 비밀번호 암호화 로직 (나중에 추가)
-        String hashedPassword = userRegisterDto.getPassword();
+        // 비밀번호를 암호화하여 저장
+        String encodedPassword = passwordEncoder.encode(userRegisterDto.getPassword());
 
         User user = new User();
         user.setNickname(userRegisterDto.getNickname());
-        user.setPassword(hashedPassword);
+        user.setPassword(encodedPassword); // 암호화된 비밀번호로 변경
         user.setGender(userRegisterDto.getGender());
         user.setAgeRange(userRegisterDto.getAgeRange());
         user.setCreatedAt(LocalDateTime.now());
@@ -49,9 +53,8 @@ public class UserService {
 
         User user = optionalUser.get();
 
-        // 2. 비밀번호 일치 여부 확인
-        // 실제로는 암호화된 비밀번호를 비교해야 합니다.
-        if (!user.getPassword().equals(password)) {
+        // 2. 비밀번호 일치 여부 확인 (BCryptPasswordEncoder를 사용한 비교)
+        if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
         }
 
