@@ -11,8 +11,11 @@ import java.time.LocalDateTime;
 public class User {
 
     @Id
-    @Column(name = "nickname")
-    private String nickname; // username 대신 nickname으로 변경
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id; // 다시 ID를 기본 키로 사용합니다.
+
+    @Column(name = "nickname", unique = true) // nickname 필드에 유니크 제약 조건을 추가합니다.
+    private String nickname;
 
     @Column(name = "password")
     private String password;

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 @Transactional
@@ -19,16 +20,16 @@ public class UserService {
     }
 
     public User registerUser(UserRegisterDto userRegisterDto) {
-        // 사용자 이름 중복 확인
-        userRepository.findById(userRegisterDto.getNickname()).ifPresent(user -> { // .getNickname()으로 변경
-            throw new IllegalStateException("이미 존재하는 사용자 이름입니다.");
+        // 닉네임 중복 확인
+        userRepository.findByNickname(userRegisterDto.getNickname()).ifPresent(user -> {
+            throw new IllegalStateException("이미 존재하는 닉네임입니다.");
         });
 
         // 비밀번호 암호화 로직 (나중에 추가)
         String hashedPassword = userRegisterDto.getPassword();
 
         User user = new User();
-        user.setNickname(userRegisterDto.getNickname()); // .setNickname()으로 변경
+        user.setNickname(userRegisterDto.getNickname());
         user.setPassword(hashedPassword);
         user.setGender(userRegisterDto.getGender());
         user.setAgeRange(userRegisterDto.getAgeRange());
@@ -38,12 +39,18 @@ public class UserService {
         return userRepository.save(user);
     }
 
-    public User loginUser(String nickname, String password) { // 파라미터 이름을 nickname으로 변경
-        // 1. 사용자 이름으로 DB에서 사용자 정보 조회
-        User user = userRepository.findById(nickname)
-                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+    public User loginUser(String nickname, String password) {
+        // 1. 닉네임으로 DB에서 사용자 정보 조회
+        Optional<User> optionalUser = userRepository.findByNickname(nickname);
+
+        if (optionalUser.isEmpty()) {
+            throw new IllegalArgumentException("사용자를 찾을 수 없습니다.");
+        }
+
+        User user = optionalUser.get();
 
         // 2. 비밀번호 일치 여부 확인
+        // 실제로는 암호화된 비밀번호를 비교해야 합니다.
         if (!user.getPassword().equals(password)) {
             throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
         }
