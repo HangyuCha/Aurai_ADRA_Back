@@ -12,7 +12,7 @@ public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id; // 다시 ID를 기본 키로 사용합니다.
+    private Long id; // ID를 기본 키로 사용합니다.
 
     @Column(name = "nickname", unique = true) // nickname 필드에 유니크 제약 조건을 추가합니다.
     private String nickname;
