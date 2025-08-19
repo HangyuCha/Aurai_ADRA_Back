@@ -1,5 +1,6 @@
 package com.metaverse.aurai_adra.controller;
 
+import com.metaverse.aurai_adra.dto.LoginResponseDto;
 import com.metaverse.aurai_adra.dto.UserRegisterDto;
 import com.metaverse.aurai_adra.service.UserService;
 import org.springframework.http.ResponseEntity;
@@ -28,14 +29,20 @@ public class UserController {
         }
     }
 
-    // 로그인 API 추가
     @PostMapping("/login")
-    public ResponseEntity<String> loginUser(@RequestBody UserRegisterDto userLoginDto) {
+    public ResponseEntity<LoginResponseDto> loginUser(@RequestBody UserRegisterDto userLoginDto) {
         try {
-            userService.loginUser(userLoginDto.getNickname(), userLoginDto.getPassword());
-            return ResponseEntity.ok("로그인에 성공했습니다.");
+            String accessToken = userService.loginUser(userLoginDto.getNickname(), userLoginDto.getPassword());
+
+            // DTO에 토큰을 담아 반환
+            LoginResponseDto responseDto = LoginResponseDto.builder()
+                    .accessToken(accessToken)
+                    .build();
+
+            return ResponseEntity.ok(responseDto);
+
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(LoginResponseDto.builder().accessToken(null).build()); // 토큰이 없으므로 null 반환
         }
     }
 }
