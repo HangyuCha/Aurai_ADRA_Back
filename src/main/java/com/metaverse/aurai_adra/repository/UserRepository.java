@@ -6,5 +6,5 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByNickname(String nickname);
-    // void deleteByNickname(String nickname); // 선택
+    Optional<User> findByKakaoId(String kakaoId);
 }

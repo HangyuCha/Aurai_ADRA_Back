@@ -6,7 +6,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "account", catalog = "adra") // ← account 테이블로 고정
+@Table(name = "account", catalog = "adra")
 public class User {
 
     @Id
@@ -25,6 +25,12 @@ public class User {
     @Column(name = "age_range", length = 10)
     private String ageRange;
 
+    @Column(name = "kakao_id", unique = true)
+    private String kakaoId;
+
+    @Column(name = "provider", length = 20)
+    private String provider;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -37,14 +43,25 @@ public class User {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
     public String getNickname() { return nickname; }
     public void setNickname(String nickname) { this.nickname = nickname; }
+
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
     public String getGender() { return gender; }
     public void setGender(String gender) { this.gender = gender; }
+
     public String getAgeRange() { return ageRange; }
     public void setAgeRange(String ageRange) { this.ageRange = ageRange; }
+
+    public String getKakaoId() { return kakaoId; }
+    public void setKakaoId(String kakaoId) { this.kakaoId = kakaoId; }
+
+    public String getProvider() { return provider; }
+    public void setProvider(String provider) { this.provider = provider; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getModifiedAt() { return modifiedAt; }
 }

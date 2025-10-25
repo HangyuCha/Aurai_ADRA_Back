@@ -1,6 +1,7 @@
 package com.metaverse.aurai_adra.service;
 
 import com.metaverse.aurai_adra.domain.User;
+import com.metaverse.aurai_adra.dto.KakaoProfile;
 import com.metaverse.aurai_adra.dto.UserRegisterDto;
 import com.metaverse.aurai_adra.jwt.JwtTokenProvider;
 import com.metaverse.aurai_adra.repository.UserRepository;
@@ -22,6 +23,26 @@ public class UserService {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+    }
+
+    public Optional<User> findByKakaoIdOptional(String kakaoId) {
+        return userRepository.findByKakaoId(kakaoId);
+    }
+
+    // OAuth 회원가입 분기용
+    public User registerUserFromOAuth(UserRegisterDto dto, KakaoAuthService kakaoService) {
+        String kakaoAccessToken = dto.getOauthAccessToken();
+        KakaoProfile me = kakaoService.getUserProfile(kakaoAccessToken);
+
+        User user = new User();
+        user.setNickname(dto.getNickname());
+        user.setGender(dto.getGender());
+        user.setAgeRange(dto.getAgeRange());
+        user.setProvider("kakao");
+        user.setKakaoId(String.valueOf(me.getId()));
+        // 비밀번호 없는 계정 보호: 고정 혹은 랜덤 문자열 인코딩
+        user.setPassword(passwordEncoder.encode("oauth_kakao"));
+        return userRepository.save(user);
     }
 
     public void registerUser(UserRegisterDto userRegisterDto) {
