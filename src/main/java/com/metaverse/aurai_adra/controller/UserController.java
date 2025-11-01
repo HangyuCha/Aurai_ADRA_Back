@@ -1,6 +1,7 @@
 package com.metaverse.aurai_adra.controller;
 
 import com.metaverse.aurai_adra.dto.LoginResponseDto;
+import com.metaverse.aurai_adra.dto.UserDto;
 import com.metaverse.aurai_adra.dto.UserRegisterDto;
 import com.metaverse.aurai_adra.domain.User;
 import com.metaverse.aurai_adra.jwt.JwtTokenProvider;
@@ -82,5 +83,25 @@ public class UserController {
         String nickname = jwtTokenProvider.getNicknameFromToken(token);
         userService.deleteByNickname(nickname);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * GET /api/users/me
+     * - Authorization: Bearer <jwt>
+     * - 토큰이 유효하면 토큰에서 닉네임(또는 식별자)을 꺼내 userService로 사용자 정보를 조회하여 반환합니다.
+     */
+    @GetMapping("/me")
+    public ResponseEntity<UserDto> getMe(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).build();
+        }
+        String token = authorization.substring(7);
+        if (!jwtTokenProvider.validateToken(token)) {
+            return ResponseEntity.status(401).build();
+        }
+        String nickname = jwtTokenProvider.getNicknameFromToken(token);
+        User user = userService.findByNickname(nickname);
+        if (user == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(UserDto.from(user));
     }
 }

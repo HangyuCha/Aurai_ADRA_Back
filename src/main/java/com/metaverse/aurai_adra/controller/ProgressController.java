@@ -9,6 +9,8 @@ import com.metaverse.aurai_adra.util.LearningAgeUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
+
 @RestController
 @RequestMapping("/api/progress")
 public class ProgressController {
@@ -26,21 +28,39 @@ public class ProgressController {
         return ResponseEntity.ok(snap);
     }
 
+    // GET /api/progress/chapters/me
+    @GetMapping("/chapters/me")
+    public ResponseEntity<ProgressSnapshotDto> getMyProgress(Principal principal) {
+        final String tokenUserId = principal != null ? principal.getName() : null;
+        if (tokenUserId == null) return ResponseEntity.status(401).build();
+        var snap = progressService.getSnapshot(tokenUserId);
+        return ResponseEntity.ok(snap);
+    }
+
     // POST /api/progress/chapters
+    // 프론트가 score/meta를 보내면 시도 기록을 남기고, success==true이면 summary에 최초 성공을 기록
     @PostMapping("/chapters")
-    public ResponseEntity<ProgressSnapshotDto> markChapter(@RequestBody MarkChapterRequest req) {
-        if (req.getSuccess() == null || !req.getSuccess()) {
-            // 성공만 저장하도록 정책 고정
-            return ResponseEntity.badRequest().build();
-        }
-        var snap = progressService.markSuccess(req.getUserId(), req.getChapterId(), req.getAt());
+    public ResponseEntity<ProgressSnapshotDto> markChapter(@RequestBody MarkChapterRequest req, Principal principal) {
+        final String tokenUserId = principal != null ? principal.getName() : req.getUserId();
+        if (tokenUserId == null) return ResponseEntity.status(401).build();
+
+        var snap = progressService.markSuccess(
+                tokenUserId,
+                req.getChapterId(),
+                req.getAt(),
+                req.getScore(),
+                req.getMeta(),
+                req.getSuccess()
+        );
         return ResponseEntity.ok(snap);
     }
 
     // DELETE /api/progress/chapters
     @DeleteMapping("/chapters")
-    public ResponseEntity<ProgressSnapshotDto> deleteChapter(@RequestBody RemoveChapterRequest req) {
-        var snap = progressService.removeSuccess(req.getUserId(), req.getChapterId());
+    public ResponseEntity<ProgressSnapshotDto> deleteChapter(@RequestBody RemoveChapterRequest req, Principal principal) {
+        final String tokenUserId = principal != null ? principal.getName() : req.getUserId();
+        if (tokenUserId == null) return ResponseEntity.status(401).build();
+        var snap = progressService.removeSuccess(tokenUserId, req.getChapterId());
         return ResponseEntity.ok(snap);
     }
 
