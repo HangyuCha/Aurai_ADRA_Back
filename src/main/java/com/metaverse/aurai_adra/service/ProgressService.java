@@ -5,15 +5,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.metaverse.aurai_adra.domain.PracticeAttempt;
 import com.metaverse.aurai_adra.domain.UserChapterSuccess;
 import com.metaverse.aurai_adra.domain.UserChapterSuccessId;
+import com.metaverse.aurai_adra.dto.LearningAgeResponse;
 import com.metaverse.aurai_adra.dto.ProgressSnapshotDto;
 import com.metaverse.aurai_adra.repository.PracticeAttemptRepository;
 import com.metaverse.aurai_adra.repository.UserChapterSuccessRepository;
+import com.metaverse.aurai_adra.util.LearningAgeUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -48,9 +51,10 @@ public class ProgressService {
      * markSuccess 확장:
      * - 항상 practice_attempts에 시도 저장 (score/meta를 JSON으로 저장)
      * - success == true이면 user_chapter_success에 최초 성공 기록
+     * - optional actualAge가 들어오면 snapshot에 learning view를 포함해서 반환
      */
     @Transactional
-    public ProgressSnapshotDto markSuccess(String userId, Integer chapterId, String atIso8601, Map<String, Object> score, Map<String, Object> meta, Boolean success) {
+    public ProgressSnapshotDto markSuccess(String userId, Integer chapterId, String atIso8601, Map<String, Object> score, Map<String, Object> meta, Boolean success, Integer actualAge) {
         validateChapterId(chapterId);
         Instant at = parseInstantOrNow(atIso8601);
 
@@ -72,7 +76,28 @@ public class ProgressService {
                 repo.save(UserChapterSuccess.of(userId, chapterId, at)); // 최초 성공만 기록
             }
         }
-        return getSnapshot(userId);
+
+        // 3) build snapshot and optionally compute learning view
+        ProgressSnapshotDto snapshot = getSnapshot(userId);
+
+        if (actualAge != null) {
+            int decade = LearningAgeUtil.getLearningDecade(actualAge, snapshot.getSuccessCount(), snapshot.getTotalChapters());
+            String label = LearningAgeUtil.getLearningAgeLabel(decade);
+            int percent = LearningAgeUtil.getProgressPercent(snapshot.getSuccessCount(), snapshot.getTotalChapters());
+            LearningAgeResponse learning = new LearningAgeResponse(userId, decade, label, percent, snapshot.getSuccessCount(), snapshot.getTotalChapters());
+            snapshot.setLearning(learning);
+
+            // Optional: persist to users table if you want permanent storage
+            // -> Uncomment & implement if UserRepository/User entity present.
+            // userRepository.findById(userIdLong).ifPresent(u -> {
+            //     u.setLearningAgeDecade(decade);
+            //     u.setLearningAgePercent(percent);
+            //     u.setLearningAgeUpdatedAt(Instant.now());
+            //     userRepository.save(u);
+            // });
+        }
+
+        return snapshot;
     }
 
     @Transactional
@@ -91,10 +116,6 @@ public class ProgressService {
 
     private Instant parseInstantOrNow(String iso) {
         if (iso == null || iso.isBlank()) return Instant.now();
-        try {
-            return Instant.parse(iso);
-        } catch (DateTimeParseException e) {
-            return Instant.now();
-        }
+        try { return Instant.parse(iso); } catch (DateTimeParseException e) { return Instant.now(); }
     }
 }

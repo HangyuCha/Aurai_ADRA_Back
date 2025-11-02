@@ -38,11 +38,15 @@ public class ProgressController {
     }
 
     // POST /api/progress/chapters
-    // 프론트가 score/meta를 보내면 시도 기록을 남기고, success==true이면 summary에 최초 성공을 기록
+    // Accepts score/meta and always records an attempt; if success=true and not previously recorded,
+    // the chapter success summary is created.
     @PostMapping("/chapters")
     public ResponseEntity<ProgressSnapshotDto> markChapter(@RequestBody MarkChapterRequest req, Principal principal) {
         final String tokenUserId = principal != null ? principal.getName() : req.getUserId();
         if (tokenUserId == null) return ResponseEntity.status(401).build();
+
+        // 전달된 actualAge는 optional
+        Integer actualAge = req.getActualAge();
 
         var snap = progressService.markSuccess(
                 tokenUserId,
@@ -50,7 +54,8 @@ public class ProgressController {
                 req.getAt(),
                 req.getScore(),
                 req.getMeta(),
-                req.getSuccess()
+                req.getSuccess(),
+                actualAge
         );
         return ResponseEntity.ok(snap);
     }
