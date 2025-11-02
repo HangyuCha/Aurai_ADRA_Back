@@ -19,8 +19,12 @@ public class ProgressAppService {
         this.repo = repo;
     }
 
+    /**
+     * Upsert per-app progress and return a DTO summary.
+     * Idempotent: if flag already true, it will ensure timestamps set (or updated).
+     */
     @Transactional
-    public UserAppProgress upsertAppProgress(Long userId, String appId, String type, LocalDateTime at) {
+    public AppProgressSummaryDto upsertAppProgress(Long userId, String appId, String type, LocalDateTime at) {
         UserAppProgress p = repo.findByUserIdAndAppId(userId, appId)
                 .orElseGet(() -> {
                     UserAppProgress n = new UserAppProgress();
@@ -39,7 +43,15 @@ public class ProgressAppService {
             throw new IllegalArgumentException("unknown type: " + type);
         }
 
-        return repo.save(p);
+        UserAppProgress saved = repo.save(p);
+
+        return new AppProgressSummaryDto(
+                saved.getAppId(),
+                saved.isPracticeDone(),
+                saved.isLearnDone(),
+                saved.getLastPracticeAt() == null ? null : saved.getLastPracticeAt().toString(),
+                saved.getLastLearnAt() == null ? null : saved.getLastLearnAt().toString()
+        );
     }
 
     @Transactional(readOnly = true)

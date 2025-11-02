@@ -1,9 +1,10 @@
 package com.metaverse.aurai_adra.controller;
 
+import com.metaverse.aurai_adra.domain.User;
 import com.metaverse.aurai_adra.dto.AppProgressRequest;
 import com.metaverse.aurai_adra.dto.AppProgressSummaryDto;
 import com.metaverse.aurai_adra.service.ProgressAppService;
-import com.metaverse.aurai_adra.repository.UserRepository; // optional: for resolving principal -> user id
+import com.metaverse.aurai_adra.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,19 +12,25 @@ import java.security.Principal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/progress")
 public class ProgressAppController {
 
     private final ProgressAppService service;
-    private final UserRepository userRepository; // project has this repo; used only if Principal.getName() not numeric
+    private final UserRepository userRepository; // 필요시 Principal -> user id 매핑용
 
     public ProgressAppController(ProgressAppService service, UserRepository userRepository) {
         this.service = service;
         this.userRepository = userRepository;
     }
 
+    /**
+     * Upsert per-app progress for the authenticated user.
+     * Request example:
+     * { "appId":"sms", "type":"learn", "at":"2025-11-02T10:23:00" }  // "at" optional, ISO-8601 local datetime
+     */
     @PostMapping("/app")
     public ResponseEntity<?> upsertApp(@RequestBody AppProgressRequest req, Principal principal) {
         Long userId = resolveUserId(principal);
@@ -32,10 +39,13 @@ public class ProgressAppController {
             if (req.getAt() != null) at = LocalDateTime.parse(req.getAt());
         } catch (DateTimeParseException ignored) {}
 
-        service.upsertAppProgress(userId, req.getAppId(), req.getType(), at);
-        return ResponseEntity.ok(Map.of("ok", true));
+        AppProgressSummaryDto updated = service.upsertAppProgress(userId, req.getAppId(), req.getType(), at);
+        return ResponseEntity.ok(updated);
     }
 
+    /**
+     * Return per-app summary map for the authenticated user.
+     */
     @GetMapping("/summary/me")
     public ResponseEntity<?> getSummaryForMe(Principal principal) {
         Long userId = resolveUserId(principal);
@@ -43,18 +53,28 @@ public class ProgressAppController {
         return ResponseEntity.ok(Map.of("userId", userId, "appProgress", m));
     }
 
+    /**
+     * Principal.getName()가 숫자이면 그대로 userId로 사용.
+     * 숫자가 아닐 경우 UserRepository.findByNickname(name)으로 매핑 시도.
+     * 실패하면 IllegalStateException을 던집니다(필요시 401 처리로 바꾸세요).
+     */
     private Long resolveUserId(Principal principal) {
-        // 기본: Principal.getName()가 숫자인 경우 바로 userId로 사용
-        // 상황에 따라 아래 코드를 프로젝트 맞게 수정하세요.
         String name = principal == null ? null : principal.getName();
         if (name == null) throw new IllegalStateException("No principal available");
 
         try {
             return Long.parseLong(name);
         } catch (NumberFormatException ex) {
-            // TODO: Principal 이름이 숫자가 아니라면 실제 사용자 조회 로직으로 바꾸세요.
-            // 예: userRepository.findByUsername(name).orElseThrow(...)
-            throw new IllegalStateException("Principal name is not numeric. Update resolveUserId() to map principal to user id.");
+            // Principal 이름이 숫자가 아니라면 UserRepository로 매핑 시도
+            try {
+                Optional<User> maybe = userRepository.findByNickname(name);
+                if (maybe != null && maybe.isPresent()) {
+                    return maybe.get().getId();
+                }
+            } catch (Exception e) {
+                // lookup failed; will throw below
+            }
+            throw new IllegalStateException("Principal name is not numeric and user lookup failed. Update resolveUserId() to map principal to user id.");
         }
     }
 }

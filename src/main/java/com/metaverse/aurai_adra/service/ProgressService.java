@@ -6,6 +6,7 @@ import com.metaverse.aurai_adra.domain.PracticeAttempt;
 import com.metaverse.aurai_adra.domain.UserChapterSuccess;
 import com.metaverse.aurai_adra.domain.UserChapterSuccessId;
 import com.metaverse.aurai_adra.domain.User;
+import com.metaverse.aurai_adra.dto.AppProgressSummaryDto;
 import com.metaverse.aurai_adra.dto.LearningAgeResponse;
 import com.metaverse.aurai_adra.dto.ProgressSnapshotDto;
 import com.metaverse.aurai_adra.repository.PracticeAttemptRepository;
@@ -23,6 +24,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Collections;
 
 @Service
 public class ProgressService {
@@ -34,15 +36,18 @@ public class ProgressService {
     private final PracticeAttemptRepository attemptRepo;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
+    private final ProgressAppService progressAppService;
 
     public ProgressService(UserChapterSuccessRepository repo,
                            PracticeAttemptRepository attemptRepo,
                            ObjectMapper objectMapper,
-                           UserRepository userRepository) {
+                           UserRepository userRepository,
+                           ProgressAppService progressAppService) {
         this.repo = repo;
         this.attemptRepo = attemptRepo;
         this.objectMapper = objectMapper;
         this.userRepository = userRepository;
+        this.progressAppService = progressAppService;
     }
 
     public int getTotalChapters() { return TOTAL_CHAPTERS; }
@@ -54,7 +59,24 @@ public class ProgressService {
                 .map(e -> e.getId().getChapterId())
                 .sorted(Comparator.naturalOrder())
                 .toList();
-        return new ProgressSnapshotDto(userId, TOTAL_CHAPTERS, successes);
+
+        ProgressSnapshotDto snapshot = new ProgressSnapshotDto(userId, TOTAL_CHAPTERS, successes);
+
+        // Attach per-app progress if we can resolve a numeric user id
+        Long numericUserId = resolveUserIdToLong(userId);
+        if (numericUserId != null) {
+            try {
+                Map<String, AppProgressSummaryDto> appProgress = progressAppService.mapSummary(numericUserId);
+                snapshot.setAppProgress(appProgress);
+            } catch (Exception ex) {
+                // don't fail snapshot construction if app progress retrieval fails
+                snapshot.setAppProgress(Collections.emptyMap());
+            }
+        } else {
+            snapshot.setAppProgress(Collections.emptyMap());
+        }
+
+        return snapshot;
     }
 
     /**
@@ -142,5 +164,23 @@ public class ProgressService {
     private Instant parseInstantOrNow(String iso) {
         if (iso == null || iso.isBlank()) return Instant.now();
         try { return Instant.parse(iso); } catch (DateTimeParseException e) { return Instant.now(); }
+    }
+
+    /**
+     * Try to resolve a String userId (token name) into a numeric Long id if possible.
+     * Uses numeric parse first, else attempts to find by nickname via userRepository.
+     * Returns null if not resolvable.
+     */
+    private Long resolveUserIdToLong(String userId) {
+        if (userId == null) return null;
+        try {
+            return Long.parseLong(userId);
+        } catch (NumberFormatException ex) {
+            try {
+                return userRepository.findByNickname(userId).map(User::getId).orElse(null);
+            } catch (Exception e) {
+                return null;
+            }
+        }
     }
 }
