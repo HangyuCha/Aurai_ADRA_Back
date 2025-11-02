@@ -1,4 +1,3 @@
-// src/main/java/com/metaverse/aurai_adra/service/ProgressService.java
 package com.metaverse.aurai_adra.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
