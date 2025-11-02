@@ -1,3 +1,4 @@
+// src/main/java/com/metaverse/aurai_adra/domain/User.java
 package com.metaverse.aurai_adra.domain;
 
 import jakarta.persistence.*;
@@ -39,6 +40,16 @@ public class User {
     @Column(name = "modified_at", nullable = false)
     private LocalDateTime modifiedAt;
 
+    // learning age persisted fields
+    @Column(name = "learning_age_decade")
+    private Integer learningAgeDecade;
+
+    @Column(name = "learning_age_percent")
+    private Integer learningAgePercent;
+
+    @Column(name = "learning_age_updated_at")
+    private LocalDateTime learningAgeUpdatedAt;
+
     public User() {}
 
     public Long getId() { return id; }
@@ -64,4 +75,13 @@ public class User {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getModifiedAt() { return modifiedAt; }
+
+    public Integer getLearningAgeDecade() { return learningAgeDecade; }
+    public void setLearningAgeDecade(Integer learningAgeDecade) { this.learningAgeDecade = learningAgeDecade; }
+
+    public Integer getLearningAgePercent() { return learningAgePercent; }
+    public void setLearningAgePercent(Integer learningAgePercent) { this.learningAgePercent = learningAgePercent; }
+
+    public LocalDateTime getLearningAgeUpdatedAt() { return learningAgeUpdatedAt; }
+    public void setLearningAgeUpdatedAt(LocalDateTime learningAgeUpdatedAt) { this.learningAgeUpdatedAt = learningAgeUpdatedAt; }
 }

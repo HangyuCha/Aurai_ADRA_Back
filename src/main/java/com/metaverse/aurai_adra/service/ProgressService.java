@@ -1,3 +1,4 @@
+// src/main/java/com/metaverse/aurai_adra/service/ProgressService.java
 package com.metaverse.aurai_adra.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -5,19 +6,24 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.metaverse.aurai_adra.domain.PracticeAttempt;
 import com.metaverse.aurai_adra.domain.UserChapterSuccess;
 import com.metaverse.aurai_adra.domain.UserChapterSuccessId;
+import com.metaverse.aurai_adra.domain.User;
 import com.metaverse.aurai_adra.dto.LearningAgeResponse;
 import com.metaverse.aurai_adra.dto.ProgressSnapshotDto;
 import com.metaverse.aurai_adra.repository.PracticeAttemptRepository;
 import com.metaverse.aurai_adra.repository.UserChapterSuccessRepository;
+import com.metaverse.aurai_adra.repository.UserRepository;
 import com.metaverse.aurai_adra.util.LearningAgeUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class ProgressService {
@@ -28,11 +34,16 @@ public class ProgressService {
 
     private final PracticeAttemptRepository attemptRepo;
     private final ObjectMapper objectMapper;
+    private final UserRepository userRepository;
 
-    public ProgressService(UserChapterSuccessRepository repo, PracticeAttemptRepository attemptRepo, ObjectMapper objectMapper) {
+    public ProgressService(UserChapterSuccessRepository repo,
+                           PracticeAttemptRepository attemptRepo,
+                           ObjectMapper objectMapper,
+                           UserRepository userRepository) {
         this.repo = repo;
         this.attemptRepo = attemptRepo;
         this.objectMapper = objectMapper;
+        this.userRepository = userRepository;
     }
 
     public int getTotalChapters() { return TOTAL_CHAPTERS; }
@@ -52,6 +63,7 @@ public class ProgressService {
      * - 항상 practice_attempts에 시도 저장 (score/meta를 JSON으로 저장)
      * - success == true이면 user_chapter_success에 최초 성공 기록
      * - optional actualAge가 들어오면 snapshot에 learning view를 포함해서 반환
+     * - optional: learning view를 account(user) 테이블에 영구 저장 (userRepository 사용)
      */
     @Transactional
     public ProgressSnapshotDto markSuccess(String userId, Integer chapterId, String atIso8601, Map<String, Object> score, Map<String, Object> meta, Boolean success, Integer actualAge) {
@@ -87,14 +99,28 @@ public class ProgressService {
             LearningAgeResponse learning = new LearningAgeResponse(userId, decade, label, percent, snapshot.getSuccessCount(), snapshot.getTotalChapters());
             snapshot.setLearning(learning);
 
-            // Optional: persist to users table if you want permanent storage
-            // -> Uncomment & implement if UserRepository/User entity present.
-            // userRepository.findById(userIdLong).ifPresent(u -> {
-            //     u.setLearningAgeDecade(decade);
-            //     u.setLearningAgePercent(percent);
-            //     u.setLearningAgeUpdatedAt(Instant.now());
-            //     userRepository.save(u);
-            // });
+            // Try to persist to account (User entity) — robust handling: numeric id or nickname
+            try {
+                Long idLong = null;
+                try { idLong = Long.parseLong(userId); } catch (NumberFormatException e) { /* not numeric */ }
+
+                Optional<User> maybeUser = Optional.empty();
+                if (idLong != null) {
+                    maybeUser = userRepository.findById(idLong);
+                } else {
+                    maybeUser = userRepository.findByNickname(userId);
+                }
+
+                maybeUser.ifPresent(u -> {
+                    u.setLearningAgeDecade(decade);
+                    u.setLearningAgePercent(percent);
+                    u.setLearningAgeUpdatedAt(LocalDateTime.now(ZoneId.systemDefault()));
+                    userRepository.save(u);
+                });
+            } catch (Exception ex) {
+                // don't fail the main flow if persistence to account fails; log in real app
+                // e.g. logger.warn("failed to persist learning age", ex);
+            }
         }
 
         return snapshot;

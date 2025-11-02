@@ -1,3 +1,4 @@
+// src/main/java/com/metaverse/aurai_adra/repository/UserRepository.java
 package com.metaverse.aurai_adra.repository;
 
 import com.metaverse.aurai_adra.domain.User;
