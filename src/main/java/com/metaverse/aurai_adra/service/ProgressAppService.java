@@ -12,7 +12,6 @@ import java.util.stream.Collectors;
 
 @Service
 public class ProgressAppService {
-
     private final UserAppProgressRepository repo;
 
     public ProgressAppService(UserAppProgressRepository repo) {
@@ -33,25 +32,21 @@ public class ProgressAppService {
                     return n;
                 });
 
+        LocalDateTime now = (at == null) ? LocalDateTime.now() : at;
+
         if ("practice".equalsIgnoreCase(type)) {
             p.setPracticeDone(true);
-            p.setLastPracticeAt(at == null ? LocalDateTime.now() : at);
+            p.setLastPracticeAt(now);
         } else if ("learn".equalsIgnoreCase(type) || "learning".equalsIgnoreCase(type)) {
             p.setLearnDone(true);
-            p.setLastLearnAt(at == null ? LocalDateTime.now() : at);
+            p.setLastLearnAt(now);
         } else {
             throw new IllegalArgumentException("unknown type: " + type);
         }
 
         UserAppProgress saved = repo.save(p);
 
-        return new AppProgressSummaryDto(
-                saved.getAppId(),
-                saved.isPracticeDone(),
-                saved.isLearnDone(),
-                saved.getLastPracticeAt() == null ? null : saved.getLastPracticeAt().toString(),
-                saved.getLastLearnAt() == null ? null : saved.getLastLearnAt().toString()
-        );
+        return toDto(saved);
     }
 
     @Transactional(readOnly = true)
@@ -62,16 +57,27 @@ public class ProgressAppService {
     @Transactional(readOnly = true)
     public Map<String, AppProgressSummaryDto> mapSummary(Long userId) {
         List<UserAppProgress> list = listByUser(userId);
-        if (list == null) return Collections.emptyMap();
+        if (list == null || list.isEmpty()) return Collections.emptyMap();
         return list.stream().collect(Collectors.toMap(
                 UserAppProgress::getAppId,
-                p -> new AppProgressSummaryDto(
-                        p.getAppId(),
-                        p.isPracticeDone(),
-                        p.isLearnDone(),
-                        p.getLastPracticeAt() == null ? null : p.getLastPracticeAt().toString(),
-                        p.getLastLearnAt() == null ? null : p.getLastLearnAt().toString()
-                )
+                this::toDto
         ));
+    }
+
+    // Helper to convert entity -> DTO in one place
+    private AppProgressSummaryDto toDto(UserAppProgress p) {
+        AppProgressSummaryDto dto = new AppProgressSummaryDto();
+        dto.setAppId(p.getAppId());
+        dto.setPracticeDone(p.isPracticeDone());
+        dto.setLearnDone(p.isLearnDone());
+        dto.setLastPracticeAt(p.getLastPracticeAt() == null ? null : p.getLastPracticeAt().toString());
+        dto.setLastLearnAt(p.getLastLearnAt() == null ? null : p.getLastLearnAt().toString());
+
+        // If your AppProgressSummaryDto contains extra collections or metadata, set them here
+        // For example:
+        // dto.setSomeListA(p.getSomeListA());
+        // dto.setSomeMapB(p.getSomeMapB());
+
+        return dto;
     }
 }
