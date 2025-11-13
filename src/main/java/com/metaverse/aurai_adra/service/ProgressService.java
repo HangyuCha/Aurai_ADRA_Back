@@ -8,6 +8,8 @@ import com.metaverse.aurai_adra.domain.UserChapterSuccessId;
 import com.metaverse.aurai_adra.domain.User;
 import com.metaverse.aurai_adra.dto.AppProgressSummaryDto;
 import com.metaverse.aurai_adra.dto.LearningAgeResponse;
+import com.metaverse.aurai_adra.dto.PracticeScoreItem;
+import com.metaverse.aurai_adra.dto.PracticeScoresResponse;
 import com.metaverse.aurai_adra.dto.ProgressSnapshotDto;
 import com.metaverse.aurai_adra.repository.PracticeAttemptRepository;
 import com.metaverse.aurai_adra.repository.UserChapterSuccessRepository;
@@ -20,11 +22,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Collections;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class ProgressService {
@@ -69,7 +68,6 @@ public class ProgressService {
                 Map<String, AppProgressSummaryDto> appProgress = progressAppService.mapSummary(numericUserId);
                 snapshot.setAppProgress(appProgress);
             } catch (Exception ex) {
-                // don't fail snapshot construction if app progress retrieval fails
                 snapshot.setAppProgress(Collections.emptyMap());
             }
         } else {
@@ -87,7 +85,15 @@ public class ProgressService {
      * - optional: learning view를 account(user) 테이블에 영구 저장 (userRepository 사용)
      */
     @Transactional
-    public ProgressSnapshotDto markSuccess(String userId, Integer chapterId, String atIso8601, Map<String, Object> score, Map<String, Object> meta, Boolean success, Integer actualAge) {
+    public ProgressSnapshotDto markSuccess(
+            String userId,
+            Integer chapterId,
+            String atIso8601,
+            Map<String, Object> score,
+            Map<String, Object> meta,
+            Boolean success,
+            Integer actualAge
+    ) {
         validateChapterId(chapterId);
         Instant at = parseInstantOrNow(atIso8601);
 
@@ -139,8 +145,7 @@ public class ProgressService {
                     userRepository.save(u);
                 });
             } catch (Exception ex) {
-                // don't fail the main flow if persistence to account fails; log in real app
-                // e.g. logger.warn("failed to persist learning age", ex);
+                // don't fail the main flow if persistence to account fails
             }
         }
 
@@ -155,32 +160,28 @@ public class ProgressService {
         return getSnapshot(userId);
     }
 
-    private void validateChapterId(Integer chapterId) {
-        if (chapterId == null || chapterId < 1 || chapterId > TOTAL_CHAPTERS) {
-            throw new IllegalArgumentException("chapterId must be between 1 and " + TOTAL_CHAPTERS);
-        }
-    }
+    @Transactional(readOnly = true)
+    public PracticeScoresResponse getBestPracticeScores(String userId, String appId) {
+        // 1) attempts 가져오기
+        List<PracticeAttempt> attempts = attemptRepo.findByUserId(userId);
 
-    private Instant parseInstantOrNow(String iso) {
-        if (iso == null || iso.isBlank()) return Instant.now();
-        try { return Instant.parse(iso); } catch (DateTimeParseException e) { return Instant.now(); }
-    }
-
-    /**
-     * Try to resolve a String userId (token name) into a numeric Long id if possible.
-     * Uses numeric parse first, else attempts to find by nickname via userRepository.
-     * Returns null if not resolvable.
-     */
-    private Long resolveUserIdToLong(String userId) {
-        if (userId == null) return null;
-        try {
-            return Long.parseLong(userId);
-        } catch (NumberFormatException ex) {
-            try {
-                return userRepository.findByNickname(userId).map(User::getId).orElse(null);
-            } catch (Exception e) {
-                return null;
-            }
+        // 2) appId별 챕터 범위 계산
+        int start = 1, end = TOTAL_CHAPTERS;
+        if (appId != null && !appId.isBlank()) {
+            int[] range = chapterRangeForApp(appId);
+            start = range[0];
+            end = range[1];
         }
-    }
-}
+        final int from = start;
+        final int to = end;
+
+        // 3) 범위 필터 후 챕터별 최고 total 집계
+        Map<Integer, Integer> bestTotals = attempts.stream()
+                .filter(a -> a.getChapterId() != null && a.getChapterId() >= from && a.getChapterId() <= to)
+                .collect(Collectors.groupingBy(
+                        PracticeAttempt::getChapterId,
+                        Collectors.collectingAndThen(
+                                Collectors.toList(),
+                                list -> list.stream()
+                                        .map(this::extractTotalScoreSafely)
+                              

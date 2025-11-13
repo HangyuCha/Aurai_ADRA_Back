@@ -1,14 +1,17 @@
 package com.metaverse.aurai_adra.controller;
 
-import com.metaverse.aurai_adra.dto.MarkChapterRequest;
-import com.metaverse.aurai_adra.dto.ProgressSnapshotDto;
-import com.metaverse.aurai_adra.dto.RemoveChapterRequest;
-import com.metaverse.aurai_adra.dto.LearningAgeResponse;
+import com.metaverse.aurai_adra.dto.*;
+import com.metaverse.aurai_adra.jwt.JwtTokenProvider;    // 추가
+import com.metaverse.aurai_adra.repository.UserRepository; // 추가
+import com.metaverse.aurai_adra.domain.User;               // 추가
 import com.metaverse.aurai_adra.service.ProgressService;
 import com.metaverse.aurai_adra.util.LearningAgeUtil;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;                  // 추가
+import org.springframework.web.server.ResponseStatusException; // 추가
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletRequest;            // 추가
 import java.security.Principal;
 
 @RestController
@@ -16,38 +19,56 @@ import java.security.Principal;
 public class ProgressController {
 
     private final ProgressService progressService;
+    private final JwtTokenProvider tokenProvider;          // 추가
+    private final UserRepository userRepository;           // 추가
 
-    public ProgressController(ProgressService progressService) {
+    public ProgressController(ProgressService progressService,
+                              JwtTokenProvider tokenProvider,
+                              UserRepository userRepository) {
         this.progressService = progressService;
+        this.tokenProvider = tokenProvider;
+        this.userRepository = userRepository;
     }
 
-    // GET /api/progress/chapters/{userId}
+    private String resolveUserName(Principal principal, HttpServletRequest request) {
+        // 1) principal 우선
+        if (principal != null) {
+            return principal.getName(); // 우리 토큰의 subject는 nickname
+        }
+        // 2) Authorization 헤더 fallback
+        String authz = request.getHeader("Authorization");
+        String token = tokenProvider.resolveToken(authz);
+        if (token != null && tokenProvider.validateToken(token)) {
+            String nickname = tokenProvider.getNicknameFromToken(token);
+            // 존재하는 사용자만 허용
+            return userRepository.findByNickname(nickname)
+                    .map(User::getNickname)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found for token"));
+        }
+        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized");
+    }
+
     @GetMapping("/chapters/{userId}")
     public ResponseEntity<ProgressSnapshotDto> getProgress(@PathVariable String userId) {
         var snap = progressService.getSnapshot(userId);
         return ResponseEntity.ok(snap);
     }
 
-    // GET /api/progress/chapters/me
     @GetMapping("/chapters/me")
-    public ResponseEntity<ProgressSnapshotDto> getMyProgress(Principal principal) {
-        final String tokenUserId = principal != null ? principal.getName() : null;
-        if (tokenUserId == null) return ResponseEntity.status(401).build();
+    public ResponseEntity<ProgressSnapshotDto> getMyProgress(Principal principal, HttpServletRequest request) {
+        final String tokenUserId = resolveUserName(principal, request);
         var snap = progressService.getSnapshot(tokenUserId);
         return ResponseEntity.ok(snap);
     }
 
-    // POST /api/progress/chapters
-    // Accepts score/meta and always records an attempt; if success=true and not previously recorded,
-    // the chapter success summary is created.
     @PostMapping("/chapters")
-    public ResponseEntity<ProgressSnapshotDto> markChapter(@RequestBody MarkChapterRequest req, Principal principal) {
-        final String tokenUserId = principal != null ? principal.getName() : req.getUserId();
-        if (tokenUserId == null) return ResponseEntity.status(401).build();
+    public ResponseEntity<ProgressSnapshotDto> markChapter(@RequestBody MarkChapterRequest req,
+                                                           Principal principal,
+                                                           HttpServletRequest request) {
+        // principal or Authorization → nickname
+        final String tokenUserId = resolveUserName(principal, request);
 
-        // 전달된 actualAge는 optional
         Integer actualAge = req.getActualAge();
-
         var snap = progressService.markSuccess(
                 tokenUserId,
                 req.getChapterId(),
@@ -60,16 +81,26 @@ public class ProgressController {
         return ResponseEntity.ok(snap);
     }
 
-    // DELETE /api/progress/chapters
     @DeleteMapping("/chapters")
-    public ResponseEntity<ProgressSnapshotDto> deleteChapter(@RequestBody RemoveChapterRequest req, Principal principal) {
-        final String tokenUserId = principal != null ? principal.getName() : req.getUserId();
-        if (tokenUserId == null) return ResponseEntity.status(401).build();
+    public ResponseEntity<ProgressSnapshotDto> deleteChapter(@RequestBody RemoveChapterRequest req,
+                                                             Principal principal,
+                                                             HttpServletRequest request) {
+        final String tokenUserId = resolveUserName(principal, request);
         var snap = progressService.removeSuccess(tokenUserId, req.getChapterId());
         return ResponseEntity.ok(snap);
     }
 
-    // (선택) GET /api/progress/learning-age/{userId}?actualAge=67
+    @GetMapping("/practice-scores/me")
+    public ResponseEntity<PracticeScoresResponse> getMyPracticeScores(
+            @RequestParam(name = "appId", required = false) String appId,
+            Principal principal,
+            HttpServletRequest request
+    ) {
+        final String tokenUserId = resolveUserName(principal, request);
+        var resp = progressService.getBestPracticeScores(tokenUserId, appId);
+        return ResponseEntity.ok(resp);
+    }
+
     @GetMapping("/learning-age/{userId}")
     public ResponseEntity<LearningAgeResponse> getLearningAge(
             @PathVariable String userId,
