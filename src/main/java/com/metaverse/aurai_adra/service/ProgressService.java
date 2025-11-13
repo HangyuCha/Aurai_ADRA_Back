@@ -184,4 +184,78 @@ public class ProgressService {
                                 Collectors.toList(),
                                 list -> list.stream()
                                         .map(this::extractTotalScoreSafely)
-                              
+                                        .filter(Objects::nonNull)
+                                        .max(Integer::compareTo)
+                                        .orElse(null)
+                        )
+                ));
+
+        // 4) items 정렬 생성
+        List<PracticeScoreItem> items = bestTotals.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> new PracticeScoreItem(e.getKey(), e.getValue()))
+                .toList();
+
+        return new PracticeScoresResponse(appId, items);
+    }
+
+    private Integer extractTotalScoreSafely(PracticeAttempt attempt) {
+        String json = attempt.getScoreJson();
+        if (json == null || json.isBlank()) return null;
+        try {
+            Object obj = objectMapper.readValue(json, Object.class);
+            if (obj instanceof Map<?, ?> m) {
+                // 우선순위: total -> totalScore -> score -> summary.total
+                Object total = m.get("total");
+                if (total instanceof Number n) return n.intValue();
+                Object totalScore = m.get("totalScore");
+                if (totalScore instanceof Number n) return n.intValue();
+                Object score = m.get("score");
+                if (score instanceof Number n) return n.intValue();
+                Object summary = m.get("summary");
+                if (summary instanceof Map<?, ?> sm) {
+                    Object t = sm.get("total");
+                    if (t instanceof Number n2) return n2.intValue();
+                }
+            }
+            return null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private int[] chapterRangeForApp(String appId) {
+        String key = appId.toLowerCase(Locale.ROOT);
+        return switch (key) {
+            case "sms" -> new int[]{1, 5};
+            case "call" -> new int[]{6, 10};
+            case "gpt" -> new int[]{11, 15};
+            case "kakao" -> new int[]{16, 20};
+            default -> new int[]{1, TOTAL_CHAPTERS};
+        };
+    }
+
+    private void validateChapterId(Integer chapterId) {
+        if (chapterId == null || chapterId < 1 || chapterId > TOTAL_CHAPTERS) {
+            throw new IllegalArgumentException("chapterId must be between 1 and " + TOTAL_CHAPTERS);
+        }
+    }
+
+    private Instant parseInstantOrNow(String iso) {
+        if (iso == null || iso.isBlank()) return Instant.now();
+        try { return Instant.parse(iso); } catch (java.time.format.DateTimeParseException e) { return Instant.now(); }
+    }
+
+    private Long resolveUserIdToLong(String userId) {
+        if (userId == null) return null;
+        try {
+            return Long.parseLong(userId);
+        } catch (NumberFormatException ex) {
+            try {
+                return userRepository.findByNickname(userId).map(User::getId).orElse(null);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+    }
+}
